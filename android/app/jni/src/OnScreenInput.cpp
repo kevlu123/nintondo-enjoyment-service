@@ -321,7 +321,7 @@ void OnScreenNumpad::Update() {
 				for (int b = 0; b < NUMPAD_KEY_SIZE; b++)
 					px[(ay + b) * NUMPAD_KEY_SIZE * 3 + (ax + a)] = c;
 
-			Character("123456789.0<"[y * 3 + x]).DrawChar(
+			Character("123456789 0<"[y * 3 + x]).DrawChar(
 				px,
 				tex->GetWidth(),
 				ax + NUMPAD_BORDER + 1,
@@ -360,13 +360,13 @@ bool OnScreenNumpad::GetKeyAnyDown(Key& key) const {
 						SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3,
 						SDL_SCANCODE_4, SDL_SCANCODE_5, SDL_SCANCODE_6,
 						SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9,
-						SDL_SCANCODE_PERIOD, SDL_SCANCODE_0, SDL_SCANCODE_BACKSPACE,
+						(SDL_Scancode)0, SDL_SCANCODE_0, SDL_SCANCODE_BACKSPACE,
 					};
 					constexpr SDL_Keycode keycodes[12] = {
 						SDLK_1, SDLK_2, SDLK_3,
 						SDLK_4, SDLK_5, SDLK_6,
 						SDLK_7, SDLK_8, SDLK_9,
-						SDLK_PERIOD, SDLK_0, SDLK_BACKSPACE,
+						0, SDLK_0, SDLK_BACKSPACE,
 					};
 					key = Key::Keyboard(scancodes[i], keycodes[i]);
 					return true;

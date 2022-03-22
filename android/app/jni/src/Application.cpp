@@ -384,7 +384,8 @@ bool Application::PollEvents() {
 		case SDL_FINGERMOTION: {
 			int x = (int)(ev.tfinger.x * GetClientWidth());
 			int y = (int)(ev.tfinger.y * GetClientHeight());
-			touches.at(ev.tfinger.fingerId) = { x, y };
+			if (touches.contains(ev.tfinger.fingerId))
+				touches.at(ev.tfinger.fingerId) = { x, y };
 			break;
 		}
 		}
