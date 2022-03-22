@@ -284,7 +284,7 @@ bool EmulatorApp::OnUpdate() {
 				if (connectIP.size() - dotIndex == 4) {
 					if (backspace) {
 						connectIP.pop_back();
-					} else if (connectIP.size() <= 12) {
+					} else if (std::count(connectIP.begin(), connectIP.end(), '.') < 3){
 						connectIP.push_back('.');
 					}
 				}
