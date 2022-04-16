@@ -1,12 +1,4 @@
-#if defined(__ANDROID__)
-#include "filesystem.h"
-namespace fs = ghc::filesystem;
-#else
-#include <filesystem>
-namespace fs = std::filesystem;
-#endif
-
-#include <fstream>
+#include "File.h"
 #include "EmulatorApp.h"
 #include "Nes.h"
 #include "json.h"
@@ -14,60 +6,6 @@ namespace fs = std::filesystem;
 
 constexpr size_t MAX_RECENT_ROMS = 10;
 constexpr size_t MAX_CONTROLLERS = 8;
-
-static bool ReadFromFile(const std::string& path, std::vector<uint8_t>& data) {
-	data.clear();
-
-	std::ifstream f(path, std::ios::binary | std::ios::ate);
-	if (!f.is_open())
-		return false;
-
-	size_t len = f.tellg();
-	f.seekg(0);
-	data.resize(len);
-	f.read((char*)data.data(), len);
-
-	if (f.fail() || f.bad()) {
-		data.clear();
-		return false;
-	} else {
-		return true;
-	}
-}
-
-static bool WriteToFile(const std::string& path, const std::vector<uint8_t>& data) {
-	std::ofstream f(path, std::ios::binary);
-	if (!f.is_open())
-		return false;
-
-	f.write((const char*)data.data(), data.size());
-	return !f.fail() && !f.bad();
-}
-
-static void CreateFolder(const std::string& path) {
-	try {
-		fs::create_directory(path);
-	} catch (std::exception&) { }
-}
-
-static bool FileExists(const std::string& path) {
-	try {
-		return fs::exists(path);
-	} catch (std::exception&) {
-		return false;
-	}
-}
-
-template <class F>
-static void IterateDirectory(const std::string& path, F f) {
-	try {
-		for (const auto& entry : fs::directory_iterator(path)) {
-			if (entry.is_regular_file()) {
-				f(entry.path().string());
-			}
-		}
-	} catch (std::exception&) {}
-}
 
 static std::string PadLeft(int x, size_t len) {
 	auto s = std::to_string(x);
@@ -81,18 +19,6 @@ static std::string PadRight(int x, size_t len) {
 	while (s.size() < len)
 		s.push_back(' ');
 	return s;
-}
-
-static std::string GetFilenameWithoutExtension(std::string name) {
-	// Extract filename from path
-	size_t slashIndex = name.find_last_of('/');
-	if (slashIndex != std::string::npos)
-		name = name.substr(slashIndex + 1);
-
-	// Remove extension
-	size_t dotIndex = name.find_last_of('.');
-	name = name.substr(0, dotIndex);
-	return name;
 }
 
 bool EmulatorApp::OnStart() {
@@ -138,12 +64,10 @@ bool EmulatorApp::OnStart() {
 		standbyScreen = std::make_unique<Texture>(*this, screen->GetWidth(), screen->GetHeight());
 		standbyScreen->pos = screen->pos;
 		standbyScreen->size = screen->size;
-		std::vector<uint8_t> standbyScreenPx(Ppu::DRAWABLE_WIDTH * Ppu::DRAWABLE_HEIGHT);
-		for (int x = 0; x < Ppu::DRAWABLE_WIDTH; x++) {
-			for (int y = 0; y < Ppu::DRAWABLE_HEIGHT; y++) {
-				standbyScreenPx[y * Ppu::DRAWABLE_WIDTH + x] = y / 22 + 0x31;
-			}
-		}
+		standbyScreenPx = std::vector<uint8_t>(Ppu::DRAWABLE_WIDTH * Ppu::DRAWABLE_HEIGHT);
+		for (int x = 0; x < Ppu::DRAWABLE_WIDTH; x++)
+			for (int y = 0; y < Ppu::DRAWABLE_HEIGHT; y++)
+				standbyScreenPx[(size_t)y * Ppu::DRAWABLE_WIDTH + x] = y / 22 + 0x31;
 		std::vector<uint8_t> standbyScreenColours = NesInterface::ToRgba(standbyScreenPx);
 #if defined(__ANDROID__)
 		std::string t = "Press Back";
@@ -201,7 +125,7 @@ bool EmulatorApp::OnStart() {
 
 	return true;
 }
-
+#include <Windows.h>
 bool EmulatorApp::OnUpdate() {
 
 	// Check keyboard shortcuts
@@ -373,7 +297,6 @@ bool EmulatorApp::OnUpdate() {
 			0.125f, 0.25f, 0.5f,
 			1.0f, 2.0f, 4.0f, 8.0f,
 		};
-
 		emulationStep += step[emulationSpeed] * float(!paused);
 		while (emulationStep >= 1.0f) {
 			emulationStep -= 1.0f;
@@ -388,8 +311,32 @@ bool EmulatorApp::OnUpdate() {
 		SetInputEnabled(true);
 	}
 
+	auto scaleAudio = [](const std::vector<int16_t>& samples, size_t targetSamples) {
+		std::vector<int16_t> out(targetSamples);
+		if (!samples.empty()) {
+			if (samples.size() <= targetSamples) {
+				// Scale up
+				for (size_t i = 0; i < out.size(); i++) {
+					float m = (float)i / out.size();
+					out.at(i) = samples.at(size_t(m * samples.size()));
+				}
+			} else if (samples.size() > targetSamples) {
+				// Scale down
+				for (size_t i = 0; i < samples.size(); i++) {
+					float m = (float)i / samples.size();
+					out.at(size_t(m* out.size())) = samples.at(i);
+				}
+			}
+		}
+		return out;
+	};
+	audioSamples = scaleAudio(audioSamples, nes->audioSampleRate / targetFps);
+
+
 	// Update network
 	if (server) {
+		if (!nes->HasCartridgeLoaded())
+			screenBuffer = &standbyScreenPx;
 		server->Update(*screenBuffer);
 		if (audioSamples.size())
 			server->SendAudio(audioSamples);
@@ -468,8 +415,8 @@ void EmulatorApp::SaveSram() const {
 	if (nes->HasCartridgeLoaded()) {
 		const auto& sram = nes->GetSram();
 		if (sram.size()) {
-			CreateFolder(GetAppdataPath() + "Sram");
-			WriteToFile(
+			File::CreateFolder(GetAppdataPath() + "Sram");
+			File::WriteToFile(
 				GetAppdataPath() + "Sram/" + nes->GetCartridgeName() + ".sram",
 				sram
 			);
@@ -508,7 +455,7 @@ void EmulatorApp::UpdateMenu() {
 		second.text = "Open ROM"; {
 			for (const auto& filename : GetRomList()) {
 				third = MenuNode{};
-				third.text = GetFilenameWithoutExtension(filename);
+				third.text = File::GetFilenameWithoutExtension(filename);
 				third.onclick = [=] { LoadRom(filename); };
 				third.closeAfterClick = true;
 				pushThird();
@@ -520,7 +467,7 @@ void EmulatorApp::UpdateMenu() {
 		second.text = "Open Recent"; {
 			for (const auto& filename : recentRoms) {
 				third = MenuNode{};
-				third.text = GetFilenameWithoutExtension(filename);
+				third.text = File::GetFilenameWithoutExtension(filename);
 				third.onclick = [=] { LoadRom(filename); };
 				third.closeAfterClick = true;
 				pushThird();
@@ -1011,7 +958,7 @@ void EmulatorApp::SaveIni() const {
 	}
 
 	std::string dumps = j.dump(1, '\t');
-	WriteToFile(
+	File::WriteToFile(
 		GetAppdataPath() + "ini.json",
 		std::vector<uint8_t>(dumps.begin(), dumps.end())
 	);
@@ -1022,7 +969,7 @@ void EmulatorApp::LoadIni(bool reset) {
 
 	std::vector<uint8_t> data;
 	if (!reset) {
-		ReadFromFile(GetAppdataPath() + "ini.json", data);
+		File::ReadFromFile(GetAppdataPath() + "ini.json", data);
 	}
 
 	auto j = json::parse(data, nullptr, false, true);
@@ -1166,18 +1113,18 @@ void EmulatorApp::LoadRom(const std::string& path) {
 
 	SaveSram();
 
-	std::string name = GetFilenameWithoutExtension(path);
+	std::string name = File::GetFilenameWithoutExtension(path);
 
 	// Read ROM
 	std::vector<uint8_t> rom;
-	if (!ReadFromFile(path, rom)) {
+	if (!File::ReadFromFile(path, rom)) {
 		ErrorMessage("Cannot open file " + path, this);
 		return;
 	}
 
 	// Read SRAM
 	std::vector<uint8_t> sram;
-	ReadFromFile(GetAppdataPath() + "Sram/" + name + ".sram", sram);
+	File::ReadFromFile(GetAppdataPath() + "Sram/" + name + ".sram", sram);
 
 	nes->InsertCartridge(std::make_unique<Cartridge>(name, rom, sram));
 
@@ -1202,11 +1149,11 @@ void EmulatorApp::CloseRom() {
 }
 
 std::vector<std::string> EmulatorApp::GetRomList() const {
-	CreateFolder(GetAppdataPath() + "Roms");
+	File::CreateFolder(GetAppdataPath() + "Roms");
 	std::string folder = GetAppdataPath() + "Roms/";
 
 	std::vector<std::string> files;
-	IterateDirectory(folder, [&](const std::string& filename) {
+	File::IterateDirectory(folder, [&](const std::string& filename) {
 		if (filename.ends_with(".nes"))
 			files.push_back(filename);
 	});
@@ -1444,7 +1391,7 @@ void EmulatorApp::ToggleServer() {
 		server->ondisconnect = [&](auto c) {
 			overlay->Notify("Client " + std::to_string(c) + " disconnected.");
 		};
-
+		
 	} else {
 		// Quit server
 		for (auto& input : networkNesInputs)
@@ -1489,8 +1436,8 @@ std::string EmulatorApp::GetSaveStateFilename(int slot) const {
 }
 
 void EmulatorApp::SaveState(int slot) {
-	CreateFolder(GetAppdataPath() + "State");
-	if (!WriteToFile(GetSaveStateFilename(slot), nes->SaveState().GetBuffer())) {
+	File::CreateFolder(GetAppdataPath() + "States");
+	if (!File::WriteToFile(GetSaveStateFilename(slot), nes->SaveState().GetBuffer())) {
 		ErrorMessage("Failed to save state.", this);
 	} else {
 		UpdateMenu();
@@ -1499,7 +1446,7 @@ void EmulatorApp::SaveState(int slot) {
 
 void EmulatorApp::LoadState(int slot) {
 	std::vector<uint8_t> data;
-	if (!ReadFromFile(GetSaveStateFilename(slot), data)) {
+	if (!File::ReadFromFile(GetSaveStateFilename(slot), data)) {
 		ErrorMessage("Failed to read savestate.", this);
 	} else {
 		Savestate state = data;
@@ -1512,7 +1459,7 @@ void EmulatorApp::LoadState(int slot) {
 }
 
 bool EmulatorApp::SaveStateExists(int slot) const {
-	return FileExists(GetSaveStateFilename(slot));
+	return File::FileExists(GetSaveStateFilename(slot));
 }
 
 void EmulatorApp::ToggleOnScreenInputEnabled() {

@@ -35,6 +35,7 @@ private:
 	std::vector<std::string> GetRomList() const;
 	std::unique_ptr<NesInterface> nes;
 	std::unique_ptr<Texture> screen;
+	std::vector<uint8_t> standbyScreenPx;
 	std::unique_ptr<Texture> standbyScreen;
 	std::unique_ptr<Overlay> overlay;
 	const std::vector<uint8_t>* screenBuffer = nullptr;

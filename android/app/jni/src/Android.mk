@@ -17,6 +17,7 @@ LOCAL_SRC_FILES := \
 	Cpu.cpp \
 	EmulatorApp.cpp \
 	Font.cpp \
+	Headless.cpp \
 	lodepng.cpp \
 	Main.cpp \
 	Mapper.cpp \

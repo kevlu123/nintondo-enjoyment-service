@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <functional>
+#include <optional>
 #include <cstring>
 #include "Stopwatch.h"
 #include "InputSource.h"

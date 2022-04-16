@@ -1,4 +1,5 @@
 #include "EmulatorApp.h"
+#include "Headless.h"
 
 #if defined(_WIN32)
 #pragma comment(lib, "SDL2.lib")
@@ -11,13 +12,17 @@
 #endif
 
 int main(int argc, char** argv) {
-
+	
 #if defined(NDEBUG)
 	try {
 #endif
-		EmulatorApp app;
-		app.SetCommandLine(argc, argv);
-		app.Run();
+		if (argc >= 2 && std::strcmp(argv[1], "-headless") == 0) {
+			RunHeadless(argc, argv);
+		} else {
+			EmulatorApp app;
+			app.SetCommandLine(argc, argv);
+			app.Run();
+		}
 		return 0;
 
 #if defined(NDEBUG)

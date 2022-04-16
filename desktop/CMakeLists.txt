@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_BUILD_TYPE Release)
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 add_compile_definitions(NDEBUG)
 
 add_executable(nes
@@ -19,6 +19,7 @@ add_executable(nes
     Cpu.cpp
     EmulatorApp.cpp
     Font.cpp
+	Headless.cpp
     lodepng.cpp
     Main.cpp
     Mapper.cpp
